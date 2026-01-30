@@ -236,36 +236,42 @@ export const handleNormalisedProductsFields = async (
         try {
           const getProductWithRetry = async (parsedProduct: any, maxRetries = 3) => {
             for (let attempt = 0; attempt < maxRetries; attempt++) {
-              const existingFromDB = existingNameMap.get(parsedProduct?.name);
-              const createdInThisImport = createdProductsByName.get(
-                parsedProduct?.name,
-              );
-              const existedProductNames =
-                existingFromDB || createdInThisImport
-                  ? [existingFromDB || createdInThisImport]
-                  : [];
+              try {
+                const existingFromDB = existingNameMap.get(parsedProduct?.name);
+                const createdInThisImport = createdProductsByName.get(
+                  parsedProduct?.name,
+                );
+                const existedProductNames =
+                  existingFromDB || createdInThisImport
+                    ? [existingFromDB || createdInThisImport]
+                    : [];
 
-              const existingBarcodeFromDB = existingBarcodeMap.get(
-                parsedProduct?.barcodeId,
-              );
-              const createdBarcodeInThisImport = createdProductsByBarcode.get(
-                parsedProduct?.barcodeId,
-              );
-              const existedProductBarcodes =
-                existingBarcodeFromDB || createdBarcodeInThisImport
-                  ? [existingBarcodeFromDB || createdBarcodeInThisImport]
-                  : [];
+                const existingBarcodeFromDB = existingBarcodeMap.get(
+                  parsedProduct?.barcodeId,
+                );
+                const createdBarcodeInThisImport = createdProductsByBarcode.get(
+                  parsedProduct?.barcodeId,
+                );
+                const existedProductBarcodes =
+                  existingBarcodeFromDB || createdBarcodeInThisImport
+                    ? [existingBarcodeFromDB || createdBarcodeInThisImport]
+                    : [];
 
-              const nameKey = parsedProduct?.name;
-              const barcodeKey = parsedProduct?.barcodeId;
+                const nameKey = parsedProduct?.name;
+                const barcodeKey = parsedProduct?.barcodeId;
 
-              if ((nameKey && productCreationLocks.has(nameKey)) ||
-                  (barcodeKey && productCreationLocks.has(barcodeKey))) {
-                await new Promise(resolve => setTimeout(resolve, 10 + Math.random() * 20));
-                continue;
+                if ((nameKey && productCreationLocks.has(nameKey)) ||
+                    (barcodeKey && productCreationLocks.has(barcodeKey))) {
+                  await new Promise(resolve => setTimeout(resolve, 10 + Math.random() * 20));
+                  continue;
+                }
+
+                return { existedProductNames, existedProductBarcodes };
+              } catch (err) {
+                if (attempt < maxRetries - 1) {
+                  await new Promise(resolve => setTimeout(resolve, 100 * (attempt + 1)));
+                }
               }
-
-              return { existedProductNames, existedProductBarcodes };
             }
 
             const existingFromDB = existingNameMap.get(parsedProduct?.name);

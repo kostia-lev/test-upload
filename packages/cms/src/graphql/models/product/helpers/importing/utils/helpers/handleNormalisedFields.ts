@@ -183,7 +183,13 @@ export const handleNormalisedProductsFields = async (
 
   const createdProductsByName = new Map<string, any>();
   const createdProductsByBarcode = new Map<string, any>();
-  
+
+  /**
+   * Prevents race conditions when CSV contains duplicate product_ids.
+   * If two workers process same product simultaneously:
+   * - First worker: creates product
+   * - Second worker: waits, then fetches created product
+   */
   const productCreationLocks = new Set<string>();
 
   // Monitoring metrics
@@ -219,7 +225,7 @@ export const handleNormalisedProductsFields = async (
         batchValidateSerialNumbers(normalizedFields, tenantFilter),
         batchValidateImages(normalizedFields, tenantFilter.tenant),
       ]);
-      
+
       const batchTime = Date.now() - batchStart;
 
       const processProduct = async (parsedProduct: any, index: number) => {
@@ -249,19 +255,19 @@ export const handleNormalisedProductsFields = async (
                 existingBarcodeFromDB || createdBarcodeInThisImport
                   ? [existingBarcodeFromDB || createdBarcodeInThisImport]
                   : [];
-              
+
               const nameKey = parsedProduct?.name;
               const barcodeKey = parsedProduct?.barcodeId;
-              
-              if ((nameKey && productCreationLocks.has(nameKey)) || 
+
+              if ((nameKey && productCreationLocks.has(nameKey)) ||
                   (barcodeKey && productCreationLocks.has(barcodeKey))) {
                 await new Promise(resolve => setTimeout(resolve, 10 + Math.random() * 20));
                 continue;
               }
-              
+
               return { existedProductNames, existedProductBarcodes };
             }
-            
+
             const existingFromDB = existingNameMap.get(parsedProduct?.name);
             const existingBarcodeFromDB = existingBarcodeMap.get(
               parsedProduct?.barcodeId,
@@ -271,7 +277,7 @@ export const handleNormalisedProductsFields = async (
               existedProductBarcodes: existingBarcodeFromDB ? [existingBarcodeFromDB] : [],
             };
           };
-          
+
           const { existedProductNames, existedProductBarcodes } = await getProductWithRetry(parsedProduct);
 
           const brandId = getEntityIdByName(
@@ -401,7 +407,7 @@ export const handleNormalisedProductsFields = async (
 
               const nameKey = parsedProduct?.name;
               const barcodeKey = parsedProduct?.barcodeId;
-              
+
               if (nameKey) {
                 productCreationLocks.add(nameKey);
                 createdProductsByName.set(nameKey, createdProductRecord);

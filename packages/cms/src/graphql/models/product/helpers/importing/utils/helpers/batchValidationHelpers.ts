@@ -29,20 +29,33 @@ export const batchValidateSerialNumbers = async (
 
   // Batch check all serial numbers at once
   const uniqueSerialNumbers = [...new Set(allSerialNumbers)];
-  const availabilityPromises = uniqueSerialNumbers.map(async (serial) => {
-    const result = await checkSerialNumbersAvailability({
-      serialNumbers: [serial],
-      tenantFilter,
-    });
-    return { serial, isAvailable: result.isAllSerialNumbersAvailable };
+  const result = await checkSerialNumbersAvailability({
+    serialNumbers: uniqueSerialNumbers,
+    tenantFilter,
   });
 
-  const results = await Promise.all(availabilityPromises);
-  
   // Create a map of serial number availability
   const availabilityMap = new Map<string, boolean>();
-  results.forEach(({ serial, isAvailable }) => {
-    availabilityMap.set(serial, isAvailable);
+  const existedSerialNumbersMap = new Map<string, boolean>();
+
+  // Check each existed serial number for relations
+  result.existedSerialNumbers.forEach((item) => {
+    const hasRelations =
+      item?.sellingProductOrderItem?.id ||
+      item?.returnItem?.id ||
+      item?.inventoryAdjustmentItem?.id ||
+      item?.transferOrderItem?.id ||
+      item?.productInventoryItem?.id;
+
+    existedSerialNumbersMap.set(item.name, !hasRelations);
+  });
+
+  uniqueSerialNumbers.forEach((serial) => {
+    // A serial number is available if:
+    // 1. It doesn't exist in the database (not in existedSerialNumbersMap)
+    // 2. It exists but has no relations (value is true in existedSerialNumbersMap)
+    const isExisted = existedSerialNumbersMap.has(serial);
+    availabilityMap.set(serial, !isExisted || existedSerialNumbersMap.get(serial));
   });
 
   return availabilityMap;
@@ -80,15 +93,15 @@ export const batchValidateImages = async (
       tenantId,
       true,
     );
-    return { 
-      image, 
-      isValid: isImagesIdsValid, 
-      ids: imagesIdsArray 
+    return {
+      image,
+      isValid: isImagesIdsValid,
+      ids: imagesIdsArray
     };
   });
 
   const results = await Promise.all(imageValidationPromises);
-  
+
   // Create a map of image validation results
   const imageValidationMap = new Map<string, { isValid: boolean; ids: string[] }>();
   results.forEach(({ image, isValid, ids }) => {
@@ -106,7 +119,7 @@ export const checkProductSerialNumbersAvailability = (
 
   for (const item of product.productItems) {
     if (!item.serialNumbers?.length) continue;
-    
+
     for (const serialNumber of item.serialNumbers) {
       const isAvailable = serialAvailabilityMap.get(serialNumber);
       if (isAvailable === false) {
